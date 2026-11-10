@@ -26,9 +26,9 @@ Process* queue_peek(ProcessQueue* q);
 bool queue_is_empty(ProcessQueue* q);
 int queue_size(ProcessQueue* q);
 
-// Operaciones especializadas para Scheduling y consultas CLI
-Process* queue_extract_min_remaining(ProcessQueue* q); // Para SRTF
+Process* queue_extract_min_remaining(ProcessQueue* q);
+Process* queue_peek_min_remaining(ProcessQueue* q);
 Process* queue_find_by_pid(ProcessQueue* q, int pid);
 Process* queue_remove_by_pid(ProcessQueue* q, int pid);
 
-#endif // PROCESS_QUEUE_H
+#endif

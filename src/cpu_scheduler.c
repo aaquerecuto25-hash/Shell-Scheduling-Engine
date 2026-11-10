@@ -10,6 +10,8 @@ static void sleep_ms(int ms) {
 
 static void* scheduler_thread_func(void* arg) {
     CpuScheduler* s = (CpuScheduler*)arg;
+    Process* running = NULL;
+    int ticks_on_cpu = 0;
 
     while (1) {
         pthread_mutex_lock(&s->ctrl_mutex);
@@ -17,11 +19,9 @@ static void* scheduler_thread_func(void* arg) {
             pthread_mutex_unlock(&s->ctrl_mutex);
             break;
         }
-
         while (s->paused && !s->stop_requested) {
             pthread_cond_wait(&s->ctrl_cond, &s->ctrl_mutex);
         }
-
         if (s->stop_requested) {
             pthread_mutex_unlock(&s->ctrl_mutex);
             break;
@@ -32,47 +32,67 @@ static void* scheduler_thread_func(void* arg) {
         int ms = s->ms_per_tick;
         pthread_mutex_unlock(&s->speed_mutex);
 
-        int current_tick = s->clock_ticks;
+        pthread_mutex_lock(&s->policy_mutex);
+        SchedulerPolicy policy = s->policy;
+        int quantum = s->quantum;
+        pthread_mutex_unlock(&s->policy_mutex);
 
-        Process* proc = queue_dequeue(s->ready_queue);
+        int tick = s->clock_ticks;
+
+        Process* next;
+        if (policy == POLICY_RR) {
+            next = rr_select(s->ready_queue, running, &ticks_on_cpu, quantum);
+        } else {
+            next = srtf_select(s->ready_queue, running);
+            if (next != running) ticks_on_cpu = 0;
+        }
+        running = next;
 
         pthread_mutex_lock(&s->current_mutex);
-        s->current_process = proc;
+        s->current_process = running;
         pthread_mutex_unlock(&s->current_mutex);
 
-        if (proc != NULL) {
-            if (proc->first_run_time < 0) {
-                proc->first_run_time = current_tick;
-                proc->response_time  = current_tick - proc->arrival_time;
-                proc->state          = PROCESS_STATE_RUNNING;
+        if (running != NULL) {
+            if (running->first_run_time < 0) {
+                running->first_run_time = tick;
+                running->response_time  = tick - running->arrival_time;
+                running->state          = PROCESS_STATE_RUNNING;
             }
 
-            proc->remaining_time--;
+            running->remaining_time--;
+            ticks_on_cpu++;
 
-            if (proc->remaining_time <= 0) {
-                proc->state           = PROCESS_STATE_TERMINATED;
-                proc->completion_time = current_tick + 1;
-                proc->turnaround_time = proc->completion_time - proc->arrival_time;
-                proc->waiting_time    = proc->turnaround_time - proc->burst_time;
-                if (proc->waiting_time < 0) proc->waiting_time = 0;
+            if (running->remaining_time <= 0) {
+                running->state           = PROCESS_STATE_TERMINATED;
+                running->completion_time = tick + 1;
+                running->turnaround_time = running->completion_time - running->arrival_time;
+                running->waiting_time    = running->turnaround_time - running->burst_time;
+                if (running->waiting_time < 0) running->waiting_time = 0;
 
                 if (s->on_process_complete) {
-                    s->on_process_complete(proc, proc->completion_time);
+                    s->on_process_complete(running, running->completion_time);
                 }
-            } else {
-                proc->state = PROCESS_STATE_READY;
-                queue_enqueue(s->ready_queue, proc);
+                running = NULL;
+                ticks_on_cpu = 0;
             }
         }
 
         pthread_mutex_lock(&s->current_mutex);
-        s->current_process = NULL;
+        s->current_process = running;
         pthread_mutex_unlock(&s->current_mutex);
 
-        s->clock_ticks = current_tick + 1;
-
+        s->clock_ticks = tick + 1;
         sleep_ms(ms);
     }
+
+    if (running != NULL) {
+        running->state = PROCESS_STATE_READY;
+        queue_enqueue(s->ready_queue, running);
+    }
+
+    pthread_mutex_lock(&s->current_mutex);
+    s->current_process = NULL;
+    pthread_mutex_unlock(&s->current_mutex);
 
     pthread_mutex_lock(&s->ctrl_mutex);
     s->running = false;
@@ -86,20 +106,23 @@ void scheduler_init(CpuScheduler* scheduler,
                     void (*on_complete)(Process*, int)) {
     if (!scheduler) return;
 
-    scheduler->clock_ticks    = 0;
-    scheduler->ms_per_tick    = DEFAULT_MS_PER_TICK;
-    scheduler->running        = false;
-    scheduler->paused         = false;
-    scheduler->stop_requested = false;
-    scheduler->thread_started = false;
-    scheduler->ready_queue    = ready_queue;
+    scheduler->clock_ticks     = 0;
+    scheduler->ms_per_tick     = DEFAULT_MS_PER_TICK;
+    scheduler->running         = false;
+    scheduler->paused          = false;
+    scheduler->stop_requested  = false;
+    scheduler->thread_started  = false;
+    scheduler->ready_queue     = ready_queue;
     scheduler->current_process = NULL;
+    scheduler->policy          = POLICY_RR;
+    scheduler->quantum         = DEFAULT_QUANTUM;
     scheduler->on_process_complete = on_complete;
 
     pthread_mutex_init(&scheduler->speed_mutex,   NULL);
     pthread_mutex_init(&scheduler->ctrl_mutex,    NULL);
     pthread_cond_init (&scheduler->ctrl_cond,     NULL);
     pthread_mutex_init(&scheduler->current_mutex, NULL);
+    pthread_mutex_init(&scheduler->policy_mutex,  NULL);
 }
 
 void scheduler_destroy(CpuScheduler* scheduler) {
@@ -109,6 +132,7 @@ void scheduler_destroy(CpuScheduler* scheduler) {
     pthread_mutex_destroy(&scheduler->ctrl_mutex);
     pthread_cond_destroy (&scheduler->ctrl_cond);
     pthread_mutex_destroy(&scheduler->current_mutex);
+    pthread_mutex_destroy(&scheduler->policy_mutex);
 }
 
 int scheduler_start(CpuScheduler* scheduler) {
@@ -140,7 +164,9 @@ int scheduler_start(CpuScheduler* scheduler) {
     scheduler->thread_started = true;
     pthread_mutex_unlock(&scheduler->ctrl_mutex);
 
-    printf("[Scheduler] Motor iniciado. Velocidad: %d ms/tick.\n",
+    printf("[Scheduler] Motor iniciado. Politica: %s | Quantum: %d | Velocidad: %d ms/tick.\n",
+           policy_to_string(scheduler->policy),
+           scheduler->quantum,
            scheduler->ms_per_tick);
     return 0;
 }
@@ -151,8 +177,7 @@ void scheduler_pause(CpuScheduler* scheduler) {
     pthread_mutex_lock(&scheduler->ctrl_mutex);
     if (scheduler->running && !scheduler->paused) {
         scheduler->paused = true;
-        printf("[Scheduler] Motor pausado en tick %d.\n",
-               scheduler->clock_ticks);
+        printf("[Scheduler] Motor pausado en tick %d.\n", scheduler->clock_ticks);
     }
     pthread_mutex_unlock(&scheduler->ctrl_mutex);
 }
@@ -164,8 +189,7 @@ void scheduler_resume(CpuScheduler* scheduler) {
     if (scheduler->paused) {
         scheduler->paused = false;
         pthread_cond_signal(&scheduler->ctrl_cond);
-        printf("[Scheduler] Motor reanudado en tick %d.\n",
-               scheduler->clock_ticks);
+        printf("[Scheduler] Motor reanudado en tick %d.\n", scheduler->clock_ticks);
     }
     pthread_mutex_unlock(&scheduler->ctrl_mutex);
 }
@@ -179,7 +203,7 @@ void scheduler_stop(CpuScheduler* scheduler) {
     pthread_cond_signal(&scheduler->ctrl_cond);
     pthread_mutex_unlock(&scheduler->ctrl_mutex);
 
-    printf("[Scheduler] Solicitud de detención enviada.\n");
+    printf("[Scheduler] Solicitud de detencion enviada.\n");
 }
 
 void scheduler_join(CpuScheduler* scheduler) {
@@ -204,6 +228,28 @@ void scheduler_set_speed(CpuScheduler* scheduler, int ms) {
     printf("[Scheduler] Velocidad ajustada a %d ms/tick.\n", ms);
 }
 
+void scheduler_set_policy(CpuScheduler* scheduler, SchedulerPolicy policy, int quantum) {
+    if (!scheduler) return;
+    if (quantum < 1) quantum = 1;
+
+    pthread_mutex_lock(&scheduler->policy_mutex);
+    scheduler->policy  = policy;
+    scheduler->quantum = quantum;
+    pthread_mutex_unlock(&scheduler->policy_mutex);
+
+    printf("[Scheduler] Politica: %s | Quantum: %d tick(s).\n",
+           policy_to_string(policy), quantum);
+}
+
+SchedulerPolicy scheduler_get_policy(CpuScheduler* scheduler) {
+    if (!scheduler) return POLICY_RR;
+
+    pthread_mutex_lock(&scheduler->policy_mutex);
+    SchedulerPolicy p = scheduler->policy;
+    pthread_mutex_unlock(&scheduler->policy_mutex);
+    return p;
+}
+
 int scheduler_get_tick(const CpuScheduler* scheduler) {
     if (!scheduler) return -1;
     return scheduler->clock_ticks;
@@ -215,7 +261,6 @@ Process* scheduler_get_current(CpuScheduler* scheduler) {
     pthread_mutex_lock(&scheduler->current_mutex);
     Process* p = scheduler->current_process;
     pthread_mutex_unlock(&scheduler->current_mutex);
-
     return p;
 }
 
@@ -232,6 +277,11 @@ void scheduler_print_status(CpuScheduler* scheduler) {
     int ms = scheduler->ms_per_tick;
     pthread_mutex_unlock(&scheduler->speed_mutex);
 
+    pthread_mutex_lock(&scheduler->policy_mutex);
+    SchedulerPolicy policy  = scheduler->policy;
+    int             quantum = scheduler->quantum;
+    pthread_mutex_unlock(&scheduler->policy_mutex);
+
     pthread_mutex_lock(&scheduler->current_mutex);
     Process* cur = scheduler->current_process;
     pthread_mutex_unlock(&scheduler->current_mutex);
@@ -241,10 +291,11 @@ void scheduler_print_status(CpuScheduler* scheduler) {
     printf("==================================================\n");
     printf("Estado         : %s\n",
            !running ? "DETENIDO" : (paused ? "PAUSADO" : "ACTIVO"));
-    printf("Tick actual    : %d\n",   ticks);
+    printf("Politica       : %s\n", policy_to_string(policy));
+    printf("Quantum        : %d tick(s)\n", quantum);
+    printf("Tick actual    : %d\n", ticks);
     printf("ms por tick    : %d ms\n", ms);
-    printf("Cola de listos : %d proceso(s)\n",
-           queue_size(scheduler->ready_queue));
+    printf("Cola de listos : %d proceso(s)\n", queue_size(scheduler->ready_queue));
     if (cur) {
         printf("En CPU         : PID %d (%s) - restante: %d tick(s)\n",
                cur->pid, cur->name, cur->remaining_time);

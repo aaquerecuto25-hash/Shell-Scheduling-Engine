@@ -2,9 +2,10 @@
 #include "pcb.h"
 #include "process_queue.h"
 #include "cpu_scheduler.h"
+#include "scheduler_algorithms.h"
 
 static void on_process_complete(Process* proc, int finish_tick) {
-    printf("\n[COMPLETADO] PID %d (%s) | Fin tick: %d | TAT: %d | WT: %d | RT: %d\n",
+    printf("[COMPLETADO] PID %d (%s) | Fin tick: %d | TAT: %d | WT: %d | RT: %d\n",
            proc->pid, proc->name,
            finish_tick,
            proc->turnaround_time,
@@ -13,17 +14,18 @@ static void on_process_complete(Process* proc, int finish_tick) {
     pcb_destroy(proc);
 }
 
-int main(void) {
-    printf("============================================================\n");
-    printf("  Simulador de Kernel - Modulo 4: Motor de Scheduling\n");
-    printf("============================================================\n\n");
+static void run_simulation(SchedulerPolicy policy, int quantum) {
+    printf("\n------------------------------------------------------------\n");
+    printf("  Simulacion: %s", policy_to_string(policy));
+    if (policy == POLICY_RR) printf(" (quantum = %d)", quantum);
+    printf("\n------------------------------------------------------------\n");
 
     ProcessQueue ready_queue;
     queue_init(&ready_queue);
 
-    Process* p1 = pcb_create("ProcesoA", 4, 3, 0);
-    Process* p2 = pcb_create("ProcesoB", 2, 2, 0);
-    Process* p3 = pcb_create("ProcesoC", 6, 4, 0);
+    Process* p1 = pcb_create("ProcA", 4, 3, 0);
+    Process* p2 = pcb_create("ProcB", 2, 2, 0);
+    Process* p3 = pcb_create("ProcC", 6, 4, 0);
 
     p1->state = PROCESS_STATE_READY;
     p2->state = PROCESS_STATE_READY;
@@ -33,33 +35,14 @@ int main(void) {
     queue_enqueue(&ready_queue, p2);
     queue_enqueue(&ready_queue, p3);
 
-    printf("[Main] Cola de listos inicializada con %d procesos.\n\n",
-           queue_size(&ready_queue));
-
     CpuScheduler scheduler;
     scheduler_init(&scheduler, &ready_queue, on_process_complete);
-
-    scheduler_set_speed(&scheduler, 300);
+    scheduler_set_policy(&scheduler, policy, quantum);
+    scheduler_set_speed(&scheduler, 250);
     scheduler_start(&scheduler);
 
-    struct timespec ts1 = { .tv_sec = 1, .tv_nsec = 350000000L };
-    nanosleep(&ts1, NULL);
-
-    scheduler_print_status(&scheduler);
-
-    printf("\n[Main] Pausando motor por 1 segundo...\n");
-    scheduler_pause(&scheduler);
-
-    struct timespec ts2 = { .tv_sec = 1, .tv_nsec = 0 };
-    nanosleep(&ts2, NULL);
-
-    scheduler_print_status(&scheduler);
-
-    printf("\n[Main] Reanudando motor...\n");
-    scheduler_resume(&scheduler);
-
-    struct timespec ts3 = { .tv_sec = 3, .tv_nsec = 0 };
-    nanosleep(&ts3, NULL);
+    struct timespec ts = { .tv_sec = 4, .tv_nsec = 0 };
+    nanosleep(&ts, NULL);
 
     scheduler_stop(&scheduler);
     scheduler_join(&scheduler);
@@ -69,6 +52,16 @@ int main(void) {
 
     scheduler_destroy(&scheduler);
     queue_destroy(&ready_queue);
+}
+
+int main(void) {
+    printf("============================================================\n");
+    printf("  Simulador de Kernel - Modulo 5: Algoritmos de Scheduling\n");
+    printf("============================================================\n");
+
+    run_simulation(POLICY_RR, 2);
+
+    run_simulation(POLICY_SRTF, 1);
 
     printf("\n[Main] Simulacion finalizada correctamente.\n");
     return 0;

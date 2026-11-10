@@ -149,6 +149,29 @@ Process* queue_extract_min_remaining(ProcessQueue* q) {
     return best;
 }
 
+Process* queue_peek_min_remaining(ProcessQueue* q) {
+    if (!q) return NULL;
+
+    pthread_mutex_lock(&q->mutex);
+    if (!q->head) {
+        pthread_mutex_unlock(&q->mutex);
+        return NULL;
+    }
+
+    Process* best = q->head;
+    Process* curr = q->head->next;
+    while (curr) {
+        if (curr->remaining_time < best->remaining_time ||
+            (curr->remaining_time == best->remaining_time &&
+             curr->arrival_time  < best->arrival_time)) {
+            best = curr;
+        }
+        curr = curr->next;
+    }
+    pthread_mutex_unlock(&q->mutex);
+    return best;
+}
+
 Process* queue_find_by_pid(ProcessQueue* q, int pid) {
     if (!q) return NULL;
 
