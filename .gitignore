@@ -1,0 +1,16 @@
+# Binaries & Object files
+*.o
+*.obj
+*.exe
+*.out
+*.app
+build/
+bin/
+
+# IDE & Editor files
+.vscode/
+.vs/
+*.swp
+*.swo
+*~
+.DS_Store
