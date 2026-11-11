@@ -6,8 +6,8 @@
 **Cátedra:** Sistemas Operativos  
 **Profesor:** Marcel J. Castro G.  
 **Integrantes:**  
-- Andrés Querecuto (`aaquerecuto.25@est.ucab.edu.ve`)
-- Ángel Bolívar (`asbolivar.24@est.ucab.edu.ve`)
+- Alexis Querecuto (`aaquerecuto.25@est.ucab.edu.ve`)
+- Andres Bolívar (`asbolivar.24@est.ucab.edu.ve`)
 
 ---
 
