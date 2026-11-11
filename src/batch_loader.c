@@ -13,7 +13,7 @@ static char* trim_whitespace(char* str) {
 
 int batch_load_file(const char* filepath, ProcessQueue* destination_queue, ProcessQueue* all_processes_queue) {
     if (!filepath || !destination_queue) {
-        printf("[ERROR]: Parámetros inválidos para carga por lotes.\n");
+        printf("[ERROR]: Parametros invalidos para carga por lotes.\n");
         return -1;
     }
 
@@ -49,27 +49,27 @@ int batch_load_file(const char* filepath, ProcessQueue* destination_queue, Proce
 
         token = strtok(NULL, ",");
         if (!token) {
-            printf("[ADVERTENCIA]: Línea %d incompleta (falta ráfaga). Omitida.\n", line_number);
+            printf("[ADVERTENCIA]: Linea %d incompleta (falta rafaga). Omitida.\n", line_number);
             continue;
         }
         burst = atoi(trim_whitespace(token));
 
         token = strtok(NULL, ",");
         if (!token) {
-            printf("[ADVERTENCIA]: Línea %d incompleta (falta prioridad). Omitida.\n", line_number);
+            printf("[ADVERTENCIA]: Linea %d incompleta (falta prioridad). Omitida.\n", line_number);
             continue;
         }
         priority = atoi(trim_whitespace(token));
 
         token = strtok(NULL, ",");
         if (!token) {
-            printf("[ADVERTENCIA]: Línea %d incompleta (falta arrival_time). Omitida.\n", line_number);
+            printf("[ADVERTENCIA]: Linea %d incompleta (falta arrival_time). Omitida.\n", line_number);
             continue;
         }
         arrival = atoi(trim_whitespace(token));
 
         if (burst <= 0) {
-            printf("[ADVERTENCIA]: Línea %d con burst <= 0. Omitida.\n", line_number);
+            printf("[ADVERTENCIA]: Linea %d con burst <= 0. Omitida.\n", line_number);
             continue;
         }
 

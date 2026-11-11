@@ -20,7 +20,7 @@ static void print_help(void) {
     printf(" pcb <PID>\n");
     printf("   Muestra el detalle del PCB del proceso indicado.\n");
     printf(" set_sched <RR|SRTF> [quantum]\n");
-    printf("   Cambia la política de planificación (en caliente).\n");
+    printf("   Cambia la politica de planificacion (en caliente).\n");
     printf(" set_speed <ms_por_tick>\n");
     printf("   Ajusta la velocidad del reloj discreto (50-5000 ms).\n");
     printf(" start\n");
@@ -30,7 +30,7 @@ static void print_help(void) {
     printf(" gantt\n");
     printf("   Imprime el Diagrama de Gantt acumulado hasta ahora.\n");
     printf(" stats\n");
-    printf("   Muestra las estadísticas globales de ejecución.\n");
+    printf("   Muestra las estadísticas globales de ejecucion.\n");
     printf(" help\n");
     printf("   Muestra esta lista de comandos disponibles.\n");
     printf(" exit\n");
@@ -66,14 +66,14 @@ static void cmd_pcb(ProcessQueue* all_procs, const char* pid_str, Process* curre
     // Validar que sea un número entero positivo
     for (int i = 0; pid_str[i] != '\0'; i++) {
         if (!isdigit((unsigned char)pid_str[i])) {
-            printf("[ERROR DE TIPO]: El PID debe ser un número entero positivo.\n");
+            printf("[ERROR DE TIPO]: El PID debe ser un numero entero positivo.\n");
             return;
         }
     }
 
     int pid = atoi(pid_str);
     if (pid <= 0) {
-        printf("[ERROR DE TIPO]: El PID debe ser un número entero positivo.\n");
+        printf("[ERROR DE TIPO]: El PID debe ser un numero entero positivo.\n");
         return;
     }
 
@@ -90,7 +90,7 @@ static void cmd_pcb(ProcessQueue* all_procs, const char* pid_str, Process* curre
 
     if (!found) {
         queue_unlock(all_procs);
-        printf("[ERROR]: No existe ningún proceso con PID %d en el sistema.\n", pid);
+        printf("[ERROR]: No existe ningun proceso con PID %d en el sistema.\n", pid);
         return;
     }
 
@@ -165,13 +165,13 @@ void cli_run(CpuScheduler* scheduler, ProcessQueue* all_processes) {
             cmd_ps(all_processes, scheduler_get_current(scheduler));
         } else if (strcmp(cmd, "pcb") == 0) {
             if (argc != 2) {
-                printf("[ERROR DE SINTAXIS]: Parámetros insuficientes.\nUso correcto: pcb <PID>\n");
+                printf("[ERROR DE SINTAXIS]: Parametros insuficientes.\nUso correcto: pcb <PID>\n");
                 continue;
             }
             cmd_pcb(all_processes, args[1], scheduler_get_current(scheduler));
         } else if (strcmp(cmd, "create") == 0) {
             if (argc < 3 || argc > 4) {
-                printf("[ERROR DE SINTAXIS]: Parámetros insuficientes.\nUso correcto: create <nombre> <burst_time> [prioridad]\n");
+                printf("[ERROR DE SINTAXIS]: Parametros insuficientes.\nUso correcto: create <nombre> <burst_time> [prioridad]\n");
                 continue;
             }
 
@@ -183,7 +183,7 @@ void cli_run(CpuScheduler* scheduler, ProcessQueue* all_processes) {
             }
             int burst = burst_valid ? atoi(args[2]) : 0;
             if (!burst_valid || burst <= 0) {
-                printf("[ERROR DE TIPO]: La ráfaga (burst) debe ser un entero positivo mayor a 0.\n");
+                printf("[ERROR DE TIPO]: La rafaga (burst) debe ser un entero positivo mayor a 0.\n");
                 continue;
             }
 
@@ -217,7 +217,7 @@ void cli_run(CpuScheduler* scheduler, ProcessQueue* all_processes) {
             batch_load_file(args[1], scheduler->ready_queue, all_processes);
         } else if (strcmp(cmd, "set_sched") == 0) {
             if (argc < 2 || argc > 3) {
-                printf("[ERROR DE SINTAXIS]: Parámetros incorrectos.\nUso correcto: set_sched <RR|SRTF> [quantum]\n");
+                printf("[ERROR DE SINTAXIS]: Parametros incorrectos.\nUso correcto: set_sched <RR|SRTF> [quantum]\n");
                 continue;
             }
 
@@ -227,7 +227,7 @@ void cli_run(CpuScheduler* scheduler, ProcessQueue* all_processes) {
             } else if (strcmp(args[1], "SRTF") == 0) {
                 pol = POLICY_SRTF;
             } else {
-                printf("[ERROR DE PARAMETRO]: Algoritmo no reconocido. Algoritmos válidos: RR, SRTF.\n");
+                printf("[ERROR DE PARAMETRO]: Algoritmo no reconocido. Algoritmos validos: RR, SRTF.\n");
                 continue;
             }
 
@@ -239,14 +239,14 @@ void cli_run(CpuScheduler* scheduler, ProcessQueue* all_processes) {
                 }
                 quantum = q_valid ? atoi(args[2]) : 0;
                 if (!q_valid || quantum <= 0) {
-                    printf("[ERROR DE PARAMETRO]: El quantum debe ser un número entero positivo.\n");
+                    printf("[ERROR DE PARAMETRO]: El quantum debe ser un numero entero positivo.\n");
                     continue;
                 }
             }
             scheduler_set_policy(scheduler, pol, quantum);
         } else if (strcmp(cmd, "set_speed") == 0) {
             if (argc != 2) {
-                printf("[ERROR DE SINTAXIS]: Falta el parámetro de milisegundos.\nUso correcto: set_speed <ms_por_tick>\n");
+                printf("[ERROR DE SINTAXIS]: Falta el parametro de milisegundos.\nUso correcto: set_speed <ms_por_tick>\n");
                 continue;
             }
             bool speed_valid = true;
@@ -255,7 +255,7 @@ void cli_run(CpuScheduler* scheduler, ProcessQueue* all_processes) {
             }
             int ms = speed_valid ? atoi(args[1]) : 0;
             if (!speed_valid || ms < 50 || ms > 5000) {
-                printf("[ERROR DE PARAMETRO]: Velocidad inválida (%s). Debe ser un entero entre 50 y 5000 ms.\n", args[1]);
+                printf("[ERROR DE PARAMETRO]: Velocidad invalida (%s). Debe ser un entero entre 50 y 5000 ms.\n", args[1]);
                 continue;
             }
             scheduler_set_speed(scheduler, ms);
