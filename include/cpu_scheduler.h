@@ -5,6 +5,7 @@
 #include "pcb.h"
 #include "process_queue.h"
 #include "scheduler_algorithms.h"
+#include "metrics_gantt.h"
 
 #define DEFAULT_MS_PER_TICK 500
 #define MIN_MS_PER_TICK      50
@@ -28,6 +29,8 @@ typedef struct {
     bool      thread_started;
 
     ProcessQueue* ready_queue;
+    ProcessQueue* all_processes;
+    GanttTracker  gantt_tracker;
 
     Process*        current_process;
     pthread_mutex_t current_mutex;
@@ -42,6 +45,7 @@ typedef struct {
 
 void scheduler_init(CpuScheduler* scheduler,
                     ProcessQueue* ready_queue,
+                    ProcessQueue* all_processes,
                     void (*on_complete)(Process*, int));
 
 void scheduler_destroy(CpuScheduler* scheduler);
