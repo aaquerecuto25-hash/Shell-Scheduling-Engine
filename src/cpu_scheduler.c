@@ -1,11 +1,19 @@
 #include "cpu_scheduler.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 static void sleep_ms(int ms) {
     if (ms <= 0) return;
+#ifdef _WIN32
+    Sleep((DWORD)ms);
+#else
     struct timespec ts;
     ts.tv_sec  = ms / 1000;
     ts.tv_nsec = (ms % 1000) * 1000000L;
     nanosleep(&ts, NULL);
+#endif
 }
 
 static void* scheduler_thread_func(void* arg) {
@@ -51,6 +59,9 @@ static void* scheduler_thread_func(void* arg) {
         pthread_mutex_lock(&s->current_mutex);
         s->current_process = running;
         pthread_mutex_unlock(&s->current_mutex);
+
+        // Registrar tick en el diagrama de Gantt
+        gantt_record_tick(&s->gantt_tracker, tick, running);
 
         if (running != NULL) {
             if (running->first_run_time < 0) {
@@ -103,6 +114,7 @@ static void* scheduler_thread_func(void* arg) {
 
 void scheduler_init(CpuScheduler* scheduler,
                     ProcessQueue* ready_queue,
+                    ProcessQueue* all_processes,
                     void (*on_complete)(Process*, int)) {
     if (!scheduler) return;
 
@@ -113,10 +125,13 @@ void scheduler_init(CpuScheduler* scheduler,
     scheduler->stop_requested  = false;
     scheduler->thread_started  = false;
     scheduler->ready_queue     = ready_queue;
+    scheduler->all_processes   = all_processes;
     scheduler->current_process = NULL;
     scheduler->policy          = POLICY_RR;
     scheduler->quantum         = DEFAULT_QUANTUM;
     scheduler->on_process_complete = on_complete;
+
+    gantt_init(&scheduler->gantt_tracker);
 
     pthread_mutex_init(&scheduler->speed_mutex,   NULL);
     pthread_mutex_init(&scheduler->ctrl_mutex,    NULL);
@@ -127,6 +142,8 @@ void scheduler_init(CpuScheduler* scheduler,
 
 void scheduler_destroy(CpuScheduler* scheduler) {
     if (!scheduler) return;
+
+    gantt_destroy(&scheduler->gantt_tracker);
 
     pthread_mutex_destroy(&scheduler->speed_mutex);
     pthread_mutex_destroy(&scheduler->ctrl_mutex);
